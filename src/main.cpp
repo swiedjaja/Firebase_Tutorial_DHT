@@ -15,15 +15,35 @@ username: swiedjaja@gmail.com; Steff123Xyz
 #include "DHT.h"
 
 #define DHTPIN D3     // Digital pin connected to the DHT sensor
-#define DHTTYPE DHT22   // DHT 22  (AM2302), AM2321
+#define DHTTYPE DHT11   // DHT 22  (AM2302), AM2321
 //#define DHTTYPE DHT21   // DHT 21 (AM2301)
 
 DHT dht(DHTPIN, DHTTYPE);
 //Define FirebaseESP8266 data object
 FirebaseData firebaseData;
+#define FIREBASE_TEMP "Environment/Data/Temperature"
+#define FIREBASE_HUMIDITY "Environment/Data/Humidity"
+#define FIREBASE_LEDS "Environment/Control/Led"
+
+#define LED_MAX 4
+const byte arLeds[LED_MAX] = {D5, D6, D7, D8};
+
+int nLastLedValue = 0;
+bool FirebaseGetInt(const char* path, int& value)
+{
+  bool result = Firebase.getInt(firebaseData, FIREBASE_LEDS);
+  value = firebaseData.intData();
+  return result;
+}
 
 void setup() {
   Serial.begin(115200);
+  for (byte i=0; i<LED_MAX; i++)
+  {
+     pinMode(arLeds[i], OUTPUT);
+     digitalWrite(arLeds[i], HIGH);
+  }
+
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.print("Connecting to Wi-Fi");
   while (WiFi.status() != WL_CONNECTED)
@@ -69,32 +89,24 @@ void loop() {
   Serial.print(t);
   Serial.println(F("°C "));
 
-  if (Firebase.setFloat(firebaseData, "Environment/Temperature", t))
+  if (!Firebase.setFloat(firebaseData, FIREBASE_TEMP, t))
+    Serial.println("FAILED, REASON: " + firebaseData.errorReason());
+
+  if (!Firebase.setFloat(firebaseData, FIREBASE_HUMIDITY, h))
+    Serial.println("FAILED, REASON: " + firebaseData.errorReason());
+
+  if (Firebase.getInt(firebaseData, FIREBASE_LEDS))
   {
-    Serial.println("PASSED");
-    Serial.println("PATH: " + firebaseData.dataPath());
-    Serial.println("TYPE: " + firebaseData.dataType());
-    Serial.println("ETag: " + firebaseData.ETag());
-  }
-  else
-  {
-    Serial.println("FAILED");
-    Serial.println("REASON: " + firebaseData.errorReason());
-    Serial.println("------------------------------------");
-    Serial.println();
-  }
-  if (Firebase.setFloat(firebaseData, "Environment/Humidity", h))
-  {
-    Serial.println("PASSED");
-    Serial.println("PATH: " + firebaseData.dataPath());
-    Serial.println("TYPE: " + firebaseData.dataType());
-    Serial.println("ETag: " + firebaseData.ETag());
-  }
-  else
-  {
-    Serial.println("FAILED");
-    Serial.println("REASON: " + firebaseData.errorReason());
-    Serial.println("------------------------------------");
-    Serial.println();
+     int nData = firebaseData.intData();
+     if (nLastLedValue!=nData)
+     {
+         nLastLedValue = nData;
+         Serial.printf("ReceiveData: %d\n", nData);
+         for (byte i=0; i<LED_MAX; i++)
+           digitalWrite(arLeds[i], HIGH);
+
+         if (nData>0 && nData<=LED_MAX)
+           digitalWrite(arLeds[nData-1], LOW);
+      }
   }
 }
